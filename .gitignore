@@ -1,6 +1,12 @@
 __pycache__/
 *.py[cod]
 .pytest_cache/
+.DS_Store
+~$*
+*.zip
 data/
 smoke-data/
-
+final_dataset/cache/
+java/data/
+java/six_month/data/
+java/**/final_dataset/cache/

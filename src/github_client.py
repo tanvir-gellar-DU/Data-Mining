@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import json
+import http.client
 import logging
 import os
 import random
@@ -54,7 +55,7 @@ class GitHubClient:
                     wait = min(60.0, 2**attempt + random.random())
                 LOG.warning("GitHub request failed (%s); retrying in %.1fs", exc.code, wait)
                 time.sleep(wait)
-            except (urllib.error.URLError, TimeoutError) as exc:
+            except (urllib.error.URLError, TimeoutError, http.client.IncompleteRead, ConnectionError) as exc:
                 if attempt == self.retries:
                     raise GitHubError(f"GitHub request failed for {url}: {exc}") from exc
                 wait = min(60.0, 2**attempt + random.random())
@@ -86,4 +87,3 @@ class GitHubClient:
     @staticmethod
     def quote_sha(sha: str) -> str:
         return urllib.parse.quote(sha, safe="")
-

@@ -1,0 +1,33 @@
+# Workflow
+.github/workflows/*.yml
+.github/workflows/*.yaml
+
+# Dependencies/package
+requirements*.txt
+constraints*.txt
+pyproject.toml
+poetry.lock
+Pipfile
+Pipfile.lock
+setup.py
+setup.cfg
+MANIFEST.in
+
+# Testing/quality
+pytest.ini
+tox.ini
+mypy.ini
+.flake8
+.pylintrc
+ruff.toml
+.ruff.toml
+.coveragerc
+.pre-commit-config.yaml
+.pre-commit-config.yml
+
+# Container/build
+Dockerfile
+Dockerfile.*
+docker-compose.yml
+docker-compose.yaml
+.dockerignore

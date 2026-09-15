@@ -75,5 +75,38 @@ Run the unit suite with:
 python -m unittest discover -v
 ```
 
+## One-command final dataset
+
+To run collection, episode/diff enrichment, failed-job evidence enrichment,
+and final CSV generation in one command:
+
+```bash
+python -m src.data_mining \
+  --repos repos.txt \
+  --config-files config_files.txt \
+  --source-files source_files.txt \
+  --mining-output data/mining \
+  --output final_dataset \
+  --retries 5 \
+  --workers 4 \
+  --log-level INFO
+```
+
+`GITHUB_TOKEN` (or `GH_TOKEN`) is read from the environment. The config file
+contains one repository-relative glob per line; blank lines and `#` comments
+are ignored. Patterns without `/` match a filename at any repository depth,
+while patterns containing `/` match the complete repository-relative path.
+
+The command writes intermediate/checkpoint data under `--mining-output`, then
+creates `episodes.csv`, `attempts.csv`, extraction errors, caches, and a
+validation summary under `--output`. Use `--analysis-only` to rebuild from an
+existing mining dataset, or `--offline` to rebuild using only existing local
+data and caches.
+
+Use `--since` and `--until` with explicit UTC timestamps to create a fixed,
+reproducible Actions-run window. Dense windows are recursively split below
+GitHub's filtered-result limit, and successful projected pages are atomically
+checkpointed for safe resumption.
+
 The tests specify simple and multiple-failure episodes, incomplete sequences, ignored statuses, workflow/branch isolation, duplicate SHAs, and rerun attempts.
 # Data-Mining

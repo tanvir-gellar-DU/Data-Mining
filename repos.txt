@@ -14,6 +14,7 @@ speechbrain/speechbrain
 isl-org/Open3D-ML
 aqlaboratory/openfold
 explosion/projects
-demisto/content
+superduper-io/superduper
+
 microsoft/PyCodeGPT
 LucasAlegre/morl-baselines

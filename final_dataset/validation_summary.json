@@ -1,0 +1,27 @@
+{
+  "attempts": 940,
+  "attempts_with_config_changes": 281,
+  "attempts_with_error_summary": 926,
+  "attempts_with_failed_job": 927,
+  "attempts_with_failed_step": 275,
+  "episodes": 283,
+  "episodes_with_break_config_changes": 87,
+  "episodes_with_config_changes": 139,
+  "episodes_with_repair_config_changes": 68,
+  "error_counts_by_stage": {
+    "actions_check_run": 1,
+    "actions_check_summary": 2,
+    "actions_failed_job": 7,
+    "actions_failed_step": 1100,
+    "actions_job_log": 1516,
+    "actions_jobs": 6
+  },
+  "extraction_errors": 2632,
+  "spot_checks": {
+    "code_changing_recovery": "cf7bc4dc03172df55d5c",
+    "config_change": "6a1aa5d28416f479920e",
+    "multi_failure": "5ed8c5fa97b4a66023f3",
+    "same_sha_recovery": "900f6c163ffe89c1f0ae",
+    "single_failure": "cf7bc4dc03172df55d5c"
+  }
+}

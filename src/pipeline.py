@@ -29,11 +29,18 @@ def load_repositories(path: Path) -> list[str]:
 
 def run(args: argparse.Namespace) -> int:
     output = Path(args.output)
-    client = GitHubClient(retries=args.retries)
+    client = GitHubClient(token=getattr(args, "token", None), retries=args.retries)
     metadata, all_normalized, errors = [], [], []
     for repository in load_repositories(Path(args.repos)):
         try:
-            meta, raw = collect_repository(client, repository, output, args.refresh)
+            meta, raw = collect_repository(
+                client,
+                repository,
+                output,
+                args.refresh,
+                getattr(args, "since", None),
+                getattr(args, "until", None),
+            )
         except GitHubError as exc:
             LOG.exception("Could not collect %s; continuing", repository)
             errors.append({"repository": repository, "error": str(exc)})
@@ -44,7 +51,9 @@ def run(args: argparse.Namespace) -> int:
         all_normalized.extend(normalized)
     output.mkdir(parents=True, exist_ok=True)
     with (output / "repositories.csv").open("w", encoding="utf-8", newline="") as handle:
-        writer = csv.DictWriter(handle, fieldnames=["repository", "default_branch", "head_sha", "processed_at"])
+        writer = csv.DictWriter(handle, fieldnames=[
+            "repository", "default_branch", "head_sha", "processed_at", "collection_start", "collection_cutoff"
+        ])
         writer.writeheader()
         writer.writerows(sorted(metadata, key=lambda x: x["repository"]))
     episodes = detect_episodes(all_normalized)
@@ -69,6 +78,9 @@ def main() -> int:
     parser.add_argument("--skip-enrichment", action="store_true", help="Collect runs/episodes without commit changes and diffs")
     parser.add_argument("--no-local-diff-fallback", action="store_true")
     parser.add_argument("--retries", type=int, default=5)
+    parser.add_argument("--token", default=None, help="GitHub token; defaults to GITHUB_TOKEN/GH_TOKEN")
+    parser.add_argument("--since", default=None, help="Inclusive UTC Actions-run collection start")
+    parser.add_argument("--until", default=None, help="Inclusive UTC Actions-run collection cutoff")
     parser.add_argument("--log-level", default="INFO")
     args = parser.parse_args()
     logging.basicConfig(level=getattr(logging, args.log_level.upper()), format="%(asctime)s %(levelname)s %(name)s: %(message)s")

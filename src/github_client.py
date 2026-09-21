@@ -26,14 +26,14 @@ class GitHubClient:
         self.timeout = timeout
         self.base_url = "https://api.github.com"
 
-    def _request(self, path: str, accept: str = "application/vnd.github+json") -> tuple[bytes, dict[str, str]]:
+    def _request(self, path: str, accept: str = "application/vnd.github+json", *, authenticate: bool = True) -> tuple[bytes, dict[str, str]]:
         url = path if path.startswith("http") else self.base_url + path
         headers = {
             "Accept": accept,
             "User-Agent": "github-ci-episode-miner/1.0",
             "X-GitHub-Api-Version": "2022-11-28",
         }
-        if self.token:
+        if authenticate and self.token:
             headers["Authorization"] = f"Bearer {self.token}"
         for attempt in range(self.retries + 1):
             try:
@@ -69,6 +69,13 @@ class GitHubClient:
 
     def get_text(self, path: str, accept: str) -> str:
         body, _ = self._request(path, accept)
+        return body.decode("utf-8", "replace")
+
+    def get_public_diff(self, url: str) -> str:
+        parsed = urllib.parse.urlparse(url)
+        if parsed.scheme != "https" or parsed.netloc != "github.com" or not parsed.path.endswith(".diff"):
+            raise ValueError("Expected a public github.com HTTPS .diff URL")
+        body, _ = self._request(url, "text/plain", authenticate=False)
         return body.decode("utf-8", "replace")
 
     def paginate(self, path: str, item_key: str | None = None) -> Iterator[dict[str, Any]]:

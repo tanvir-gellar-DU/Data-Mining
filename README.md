@@ -63,7 +63,7 @@ Run records preserve repository, workflow ID/name, branch, event, run ID/number/
 
 For `pull_request` events, GitHub may put a synthetic merge commit in `head_sha`. The miner preserves that value exactly and never substitutes another SHA. It also stores the run API's pull-request number, head/base refs, and head/base SHAs when GitHub supplies them. Diff enrichment operates on the GitHub-provided run SHA so its meaning matches the actual workflow run.
 
-For every distinct failure or recovery SHA, commit enrichment stores the first parent (if any), file status, additions, deletions, total changes, rename source, and patch when returned. Per-commit and cross-commit diffs first use GitHub's diff media type. Missing, empty, or suspiciously capped responses fall back to a read-only local bare clone/fetch and `git diff --binary`. Merge commits use the first parent for the per-commit diff; root commits have no parent diff.
+For every distinct failure or recovery SHA, commit enrichment stores the first parent (if any), file status, additions, deletions, total changes, rename source, and patch when returned. Diff enrichment first downloads a public GitHub `.diff` URL without sending the API token. A single-parent commit uses `/commit/<sha>.diff`; an episode or merge comparison uses `/compare/<base>..<head>.diff` so the requested endpoint trees are compared. Responses are cached on disk. Valid large responses are retained. An empty commit diff is accepted only when the paginated commit metadata independently reports no changed files; other empty or malformed responses use the local Git fallback unless it is disabled. Same-SHA comparisons are recorded as empty without a request. Merge commits use the first parent for the per-commit diff; root commits have no parent diff.
 
 ## Reliability and tests
 
@@ -76,6 +76,30 @@ python -m unittest discover -v
 ```
 
 ## One-command final dataset
+
+The unified runner finishes one repository at a time, in input-list order:
+collection, episode detection, commit/diff enrichment, Actions evidence, CSV
+generation and validation. Both enrichment stages try public `.diff` downloads
+first. When Git fallback is needed, they share a single lazy bare clone
+(`--filter=blob:none`). The clone is deleted only after that repository's
+validated outputs and completion marker are saved. An interrupted repository
+keeps its completed clone for resume. Standalone pipeline/analysis commands
+still use the temporary shallow comparison behavior described above.
+
+Per-repository outputs are saved under `final_dataset/repositories/<owner>__<repo>/`.
+The combined `episodes.csv` and `attempts.csv` are updated after each repository.
+`validation_summary.json` reports processed/requested repository counts and
+whether the combined dataset is partial. A zero-episode repository produces
+header-only CSVs. Missing evidence is recorded in extraction errors, and the
+command returns nonzero when collection or enrichment errors are present.
+
+On resume, matching validated per-repository results are reused (including
+recorded evidence gaps). Use `--retry-extraction-errors` to rebuild these results
+without recollecting raw runs; retained negative evidence caches still avoid
+repeated requests for known unavailable logs. Changes to episodes, config/source
+patterns or enrichment settings invalidate the final-result checkpoint.
+Only Git object caches are deleted: raw data, diffs, evidence, and CSVs remain.
+Large repositories can still require substantial temporary disk space.
 
 To run collection, episode/diff enrichment, failed-job evidence enrichment,
 and final CSV generation in one command:

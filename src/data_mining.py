@@ -9,7 +9,6 @@ import os
 from pathlib import Path
 
 from .build_analysis_dataset import build as build_analysis
-from .pipeline import run as run_mining
 
 
 LOG = logging.getLogger(__name__)
@@ -41,6 +40,8 @@ def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
     parser.add_argument("--since", default=None, help="Inclusive UTC Actions-run collection start")
     parser.add_argument("--until", default=None, help="Inclusive UTC Actions-run collection cutoff")
     parser.add_argument("--refresh", action="store_true", help="Ignore complete raw-run checkpoints")
+    parser.add_argument("--retry-extraction-errors", action="store_true",
+                        help="Rebuild per-repository final results, reusing run and evidence caches")
     parser.add_argument("--no-local-diff-fallback", action="store_true")
     parser.add_argument("--skip-actions-enrichment", action="store_true")
     parser.add_argument(
@@ -56,24 +57,9 @@ def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
 
 
 def run(args: argparse.Namespace) -> int:
-    mining_status = 0
     if not (args.analysis_only or args.offline):
-        mining_status = run_mining(argparse.Namespace(
-            repos=str(args.repos),
-            output=str(args.mining_output),
-            refresh=args.refresh,
-            skip_enrichment=False,
-            no_local_diff_fallback=args.no_local_diff_fallback,
-            retries=args.retries,
-            token=args.token,
-            since=args.since,
-            until=args.until,
-        ))
-        if mining_status:
-            LOG.warning(
-                "Mining recorded one or more errors; building the final dataset from successfully completed repositories"
-            )
-
+        from .repository_workflow import run_repositories
+        return run_repositories(args)
     summary = build_analysis(argparse.Namespace(
         input=args.mining_output,
         output=args.output,
@@ -85,9 +71,10 @@ def run(args: argparse.Namespace) -> int:
         workers=args.workers,
         offline=args.offline,
         skip_actions_enrichment=args.skip_actions_enrichment,
+        no_local_diff_fallback=args.no_local_diff_fallback,
     ))
     LOG.info("Final dataset summary: %s", json.dumps(summary, sort_keys=True))
-    return mining_status
+    return 1 if summary.get("extraction_errors") else 0
 
 
 def main(argv: list[str] | None = None) -> int:

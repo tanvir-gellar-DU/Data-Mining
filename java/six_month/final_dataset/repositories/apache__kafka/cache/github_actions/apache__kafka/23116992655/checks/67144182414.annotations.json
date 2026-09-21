@@ -1,0 +1,1 @@
+[{"annotation_level": "failure", "blob_href": "https://github.com/apache/kafka/blob/11f932d083cce15480828751db293e5742a72734/.github", "end_column": null, "end_line": 31, "message": "Process completed with exit code 1.", "path": ".github", "raw_details": "", "start_column": null, "start_line": 31, "title": ""}]

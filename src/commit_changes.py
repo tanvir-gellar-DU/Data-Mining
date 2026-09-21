@@ -6,7 +6,8 @@ from pathlib import Path
 from typing import Any
 
 from .github_client import GitHubClient, GitHubError
-from .storage import repo_key, write_jsonl
+from .direct_diffs import download_diff
+from .storage import read_jsonl, repo_key, write_jsonl
 
 
 LOG = logging.getLogger(__name__)
@@ -21,16 +22,10 @@ def _run_refs(episodes: list[dict[str, Any]]) -> set[tuple[str, str]]:
     return refs
 
 
-def _local_diff(repository: str, base: str, head: str, cache: Path) -> str:
-    clone = cache / (repo_key(repository) + ".git")
-    if not clone.exists():
-        subprocess.run(["git", "clone", "--bare", "--filter=blob:none", f"https://github.com/{repository}.git", str(clone)], check=True)
-    subprocess.run(["git", "-C", str(clone), "fetch", "--quiet", "origin", base, head], check=True)
-    return subprocess.run(["git", "-C", str(clone), "diff", "--binary", base, head], check=True, text=True, encoding="utf-8", errors="replace", capture_output=True).stdout
-
-
-def enrich(client: GitHubClient, episodes: list[dict[str, Any]], output: Path, local_fallback: bool = True) -> list[dict[str, str]]:
-    change_records: list[dict[str, Any]] = []
+def enrich(client: GitHubClient, episodes: list[dict[str, Any]], output: Path, local_fallback: bool = True, preserve_other_repositories: bool = False) -> list[dict[str, str]]:
+    selected = {e["repository"] for e in episodes}
+    change_records = [r for r in read_jsonl(output / "commit_changes" / "commits.jsonl")
+                      if preserve_other_repositories and r["repository"] not in selected]
     errors: list[dict[str, str]] = []
     for repository, sha in sorted(_run_refs(episodes)):
         try:
@@ -48,13 +43,16 @@ def enrich(client: GitHubClient, episodes: list[dict[str, Any]], output: Path, l
             record = {"repository": repository, "commit_sha": sha, "parent_sha": parent, "files": files}
             change_records.append(record)
             if parent:
-                _save_diff(client, repository, parent, sha, "per_commit", output, local_fallback)
+                _save_diff(client, repository, parent, sha, "per_commit", output, local_fallback,
+                           single_parent_commit=len(data.get("parents", [])) == 1,
+                           allow_empty=not raw_files)
         except (GitHubError, subprocess.SubprocessError, OSError) as exc:
             LOG.exception("Commit enrichment failed for %s@%s", repository, sha)
             errors.append({"repository": repository, "stage": "commit_enrichment", "sha": sha, "error": str(exc)})
     write_jsonl(output / "commit_changes" / "commits.jsonl", change_records)
 
-    comparisons = []
+    comparisons = [r for r in read_jsonl(output / "diffs" / "comparisons.jsonl")
+                   if preserve_other_repositories and r["repository"] not in selected]
     for episode in episodes:
         repository = episode["repository"]
         last_failed = episode["failures"][-1]["head_sha"]
@@ -71,21 +69,18 @@ def enrich(client: GitHubClient, episodes: list[dict[str, Any]], output: Path, l
     return errors
 
 
-def _save_diff(client: GitHubClient, repository: str, base: str, head: str, kind: str, output: Path, local_fallback: bool) -> Path:
+def _save_diff(client: GitHubClient, repository: str, base: str, head: str, kind: str, output: Path, local_fallback: bool, single_parent_commit: bool = False, allow_empty: bool = False) -> Path:
     folder = output / "diffs" / kind / repo_key(repository)
     folder.mkdir(parents=True, exist_ok=True)
     path = folder / f"{base}__{head}.diff"
     if path.exists():
         return path
-    try:
-        diff = client.get_text(f"/repos/{repository}/compare/{base}...{head}", "application/vnd.github.diff")
-        # Empty or suspiciously capped API diffs are retried locally when enabled.
-        if local_fallback and (not diff.strip() or len(diff.encode()) >= 950_000):
-            diff = _local_diff(repository, base, head, output / ".git-cache")
-    except (GitHubError, subprocess.SubprocessError) as exc:
-        if not local_fallback:
-            raise
-        LOG.warning("API diff unavailable, using local git for %s %s..%s: %s", repository, base, head, exc)
-        diff = _local_diff(repository, base, head, output / ".git-cache")
-    path.write_text(diff, encoding="utf-8", newline="\n")
+    if base == head:
+        path.write_text("", encoding="utf-8")
+        return path
+    diff = download_diff(client, repository, base, head, output / ".git-cache",
+                         local_fallback, single_parent_commit, allow_empty)
+    temporary = path.with_suffix(".diff.tmp")
+    temporary.write_text(diff, encoding="utf-8", newline="\n")
+    temporary.replace(path)
     return path

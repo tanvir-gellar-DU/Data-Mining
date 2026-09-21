@@ -1,3 +1,5 @@
+spring-projects/spring-boot
+spring-projects/spring-framework
 apache/kafka
 jenkinsci/jenkins
 netty/netty
@@ -20,4 +22,3 @@ spring-projects/spring-security
 apache/pinot
 apache/nacos
 apache/rocketmq
-apache/beam

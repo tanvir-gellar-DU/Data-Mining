@@ -8,8 +8,6 @@ import json
 import logging
 import os
 import re
-import shutil
-import subprocess
 import threading
 import urllib.parse
 import urllib.error
@@ -23,6 +21,7 @@ from pathlib import Path, PurePosixPath
 from typing import Any, Iterable
 
 from .github_client import GitHubClient, GitHubError
+from .direct_diffs import download_diff
 from .storage import read_jsonl, repo_key, write_jsonl
 
 
@@ -265,6 +264,8 @@ class ComparisonProvider:
         self.mining = mining
         self.output = output
         self.offline = offline
+        self.client = GitHubClient()
+        self.local_fallback = True
         self.commit_records: dict[tuple[str, str], dict[str, Any]] = {}
 
     def set_commit_records(self, records: dict[tuple[str, str], dict[str, Any]]) -> None:
@@ -293,61 +294,14 @@ class ComparisonProvider:
             return _paths_from_commit(commit)
         if self.offline:
             raise RuntimeError("exact comparison is not cached locally")
-        return self._git_diff_paths(repository, base, head)
+        return self._download_diff_paths(repository, base, head)
 
-    def _git_dir(self, repository: str) -> Path:
-        key = repo_key(repository)
-        target = self.output / "cache" / "git" / f"{key}.git"
-        if target.exists() and all((target / name).exists() for name in ("HEAD", "config", "objects")):
-            (target / "refs" / "heads").mkdir(parents=True, exist_ok=True)
-            (target / "refs" / "tags").mkdir(parents=True, exist_ok=True)
-            return target
-        if target.exists():
-            # A failed clone may leave a partial directory. It contains only
-            # this builder's disposable cache, never mining input.
-            shutil.rmtree(target)
-        target.parent.mkdir(parents=True, exist_ok=True)
-        source = self.mining / ".git-cache" / f"{key}.git"
-        if source.exists():
-            shutil.copytree(source, target)
-            # Empty refs directories are commonly omitted when the dataset is
-            # archived. Restoring them makes the copied bare cache valid.
-            (target / "refs" / "heads").mkdir(parents=True, exist_ok=True)
-            (target / "refs" / "tags").mkdir(parents=True, exist_ok=True)
-        else:
-            subprocess.run(
-                ["git", "clone", "--bare", "--filter=blob:none", f"https://github.com/{repository}.git", str(target)],
-                check=True,
-            )
-        return target
-
-    @staticmethod
-    def _git(git_dir: Path, *args: str, capture: bool = False) -> subprocess.CompletedProcess[str]:
-        return subprocess.run(
-            ["git", f"--git-dir={git_dir.resolve()}", *args],
-            check=True,
-            text=True,
-            encoding="utf-8",
-            errors="replace",
-            capture_output=capture,
-        )
-
-    def _has_commit(self, git_dir: Path, sha: str) -> bool:
-        return subprocess.run(
-            ["git", f"--git-dir={git_dir.resolve()}", "cat-file", "-e", f"{sha}^{{commit}}"],
-            stdout=subprocess.DEVNULL,
-            stderr=subprocess.DEVNULL,
-        ).returncode == 0
-
-    def _git_diff_paths(self, repository: str, base: str, head: str) -> list[str]:
-        git_dir = self._git_dir(repository)
-        missing = [sha for sha in (base, head) if not self._has_commit(git_dir, sha)]
-        if missing:
-            self._git(git_dir, "fetch", "--quiet", "origin", *missing)
-        result = self._git(git_dir, "diff", "--binary", base, head, capture=True)
+    def _download_diff_paths(self, repository: str, base: str, head: str) -> list[str]:
+        diff = download_diff(self.client, repository, base, head,
+                             self.output / "cache" / "git", self.local_fallback)
         cached = self.output / "cache" / "diffs" / repo_key(repository) / f"{base}__{head}.diff"
-        _atomic_text(cached, result.stdout)
-        return extract_diff_paths(result.stdout)
+        _atomic_text(cached, diff)
+        return extract_diff_paths(diff)
 
 
 class ActionsEnricher:
@@ -704,10 +658,15 @@ def build(args: argparse.Namespace) -> dict[str, Any]:
     mining = args.input.resolve()
     output = args.output.resolve()
     episodes, comparisons, commits = _load_inputs(mining)
-    if not episodes:
+    selected_repository = getattr(args, "repository", None)
+    if selected_repository:
+        episodes = [e for e in episodes if e["repository"] == selected_repository]
+    if not episodes and not selected_repository:
         raise RuntimeError(f"no episodes found under {mining}")
 
     provider = ComparisonProvider(mining, output, args.offline)
+    if getattr(args, "no_local_diff_fallback", False):
+        provider.local_fallback = False
     config_patterns = load_config_patterns(getattr(args, "config_files", None))
     config_matcher = lambda path: matches_config_path(path, config_patterns)
     source_patterns = load_source_patterns(getattr(args, "source_files", None))
@@ -715,6 +674,7 @@ def build(args: argparse.Namespace) -> dict[str, Any]:
     provider.set_commit_records(commits)
     effective_retries = args.retries if args.token else 0
     client = GitHubClient(token=args.token, retries=effective_retries, timeout=args.timeout)
+    provider.client = client
     actions = ActionsEnricher(output, client, args.offline or args.skip_actions_enrichment)
     errors: list[dict[str, Any]] = []
 
@@ -877,7 +837,7 @@ def build(args: argparse.Namespace) -> dict[str, Any]:
     summary = validate_outputs(episodes, disk_episode_rows, disk_attempt_rows, comparison_audit, errors)
     summary["config_patterns"] = list(config_patterns)
     summary["source_patterns"] = list(source_patterns)
-    summary["spot_checks"] = _spot_checks(episodes, episode_rows)
+    summary["spot_checks"] = _spot_checks(episodes, episode_rows, require_all=not bool(selected_repository))
     _atomic_text(output / "validation_summary.json", json.dumps(summary, indent=2, sort_keys=True) + "\n")
     _atomic_text(
         output / "README.md",
@@ -891,7 +851,7 @@ def build(args: argparse.Namespace) -> dict[str, Any]:
         "the exact diff was available and contained no matching path.\n\n"
         "Error summaries prefer retained job-log errors, then use Check Run failure annotations, "
         "then Check Run output title/summary/text. GitHub Actions job, log, Check Run, annotation, "
-        "and generated exact-diff responses are cached under `cache/`.\n",
+        "and downloaded public exact-diff responses are cached under `cache/`.\n",
     )
     return summary
 
@@ -954,7 +914,7 @@ def validate_outputs(
     }
 
 
-def _spot_checks(episodes: list[dict[str, Any]], rows: list[dict[str, Any]]) -> dict[str, str | None]:
+def _spot_checks(episodes: list[dict[str, Any]], rows: list[dict[str, Any]], require_all: bool = True) -> dict[str, str | None]:
     by_id = {row["Episode ID"]: row for row in rows}
 
     def first(predicate: Any) -> str | None:
@@ -970,7 +930,7 @@ def _spot_checks(episodes: list[dict[str, Any]], rows: list[dict[str, Any]]) -> 
         "code_changing_recovery": first(lambda episode, row: episode.get("recovery_classification") == "code_changing_recovery"),
         "config_change": first(lambda episode, row: bool(row["Config files changed"])),
     }
-    if any(value is None for value in checks.values()):
+    if require_all and any(value is None for value in checks.values()):
         raise AssertionError(f"unable to select all requested spot checks: {checks}")
     return checks
 

@@ -264,5 +264,12 @@ def collect_repository(
     manifest = json.loads(manifest_path.read_text(encoding="utf-8"))
     manifest["complete"] = True
     _write_checkpoint(manifest_path, manifest)
+    try:
+        shutil.rmtree(manifest_path.parent)
+        LOG.info("Removed completed pagination cache for %s", repository)
+    except OSError as exc:
+        # The authoritative raw and metadata checkpoints are already durable;
+        # cache cleanup failure must not make collection appear incomplete.
+        LOG.warning("Could not remove completed pagination cache for %s: %s", repository, exc)
     LOG.info("Collected %d runs for %s", len(runs), repository)
     return metadata, runs

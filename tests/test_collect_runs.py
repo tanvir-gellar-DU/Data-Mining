@@ -62,8 +62,7 @@ class CollectionCheckpointTests(unittest.TestCase):
             self.assertEqual([2], resumed.action_pages)
             self.assertEqual(101, len(runs))
             self.assertTrue((output / "raw_runs" / "owner__repo.jsonl").exists())
-            manifest = json.loads((checkpoint / "checkpoint.json").read_text())
-            self.assertTrue(manifest["complete"])
+            self.assertFalse(checkpoint.exists())
 
     def test_explicit_collection_window_is_used(self):
         with tempfile.TemporaryDirectory() as directory:
@@ -75,11 +74,11 @@ class CollectionCheckpointTests(unittest.TestCase):
                 collection_since="2026-03-15T13:49:24Z",
                 collection_until="2026-09-15T13:49:24Z",
             )
-            manifest = json.loads(
-                (Path(directory) / "pagination_checkpoints" / "owner__repo" / "checkpoint.json").read_text()
+            metadata = json.loads(
+                (Path(directory) / "repository_metadata" / "owner__repo.jsonl").read_text()
             )
-            self.assertEqual("2026-03-15T13:49:24Z", manifest["start"])
-            self.assertEqual("2026-09-15T13:49:24Z", manifest["cutoff"])
+            self.assertEqual("2026-03-15T13:49:24Z", metadata["collection_start"])
+            self.assertEqual("2026-09-15T13:49:24Z", metadata["collection_cutoff"])
 
 
 if __name__ == "__main__":

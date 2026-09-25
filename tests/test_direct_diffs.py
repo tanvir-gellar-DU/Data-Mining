@@ -107,3 +107,6 @@ class DirectDiffTests(unittest.TestCase):
             self.assertEqual(["pom.xml"], provider.exact_paths("o/r", "a", "b"))
             self.assertEqual(["pom.xml"], provider.exact_paths("o/r", "a", "b"))
             provider.client.get_public_diff.assert_called_once()
+            cache = root / "output/cache/comparison_paths/o__r/a__b.paths.json"
+            self.assertTrue(cache.exists())
+            self.assertNotIn("-old", cache.read_text())

@@ -324,10 +324,10 @@ java/six_month/data/config_filter/
 | `progress/` | Temporary progress files present only while a run is active or interrupted. |
 
 The filter does not create `episodes.csv` or `attempts.csv`.
-`selected_episodes.jsonl` is the input for the next enrichment/CSV stage. The
-current general CSV builder still reads the mining episode dataset by default,
-so a new Codex must explicitly connect the builder to the selected episode file
-before generating the config-focused final CSVs.
+`selected_episodes.jsonl` is the input for the next enrichment/CSV stage. Pass
+it to the general builder with `--episodes-input`; the builder verifies that
+every selected record is an exact member of the canonical mining episode file
+before performing enrichment or writing CSVs.
 
 ## Validation commands
 

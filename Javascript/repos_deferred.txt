@@ -1,0 +1,6 @@
+# Deferred collection. Preserve existing checkpoints and resume without --refresh.
+# Use the full repos.txt afterward to rebuild combined outputs for all repositories.
+storybookjs/storybook
+nodejs/node
+vercel/next.js
+oven-sh/bun

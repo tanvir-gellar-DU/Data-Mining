@@ -104,6 +104,7 @@ def run_repositories(args):
                 write_jsonl(folder / "mining_errors.jsonl", repo_errors)
                 build(Namespace(
                     input=mining, output=folder, repository=repository,
+                    episodes_input=None,
                     config_files=args.config_files, source_files=args.source_files,
                     token=args.token, retries=args.retries, timeout=args.timeout,
                     workers=args.workers, offline=False,

@@ -33,6 +33,12 @@ def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
     )
     parser.add_argument("--mining-output", type=Path, default=Path("data/mining"))
     parser.add_argument("--output", type=Path, default=Path("final_dataset"))
+    parser.add_argument(
+        "--episodes-input",
+        type=Path,
+        default=None,
+        help="Optional filtered episode JSONL; valid with --analysis-only or --offline",
+    )
     parser.add_argument("--token", default=None, help="GitHub token; defaults to GITHUB_TOKEN/GH_TOKEN")
     parser.add_argument("--retries", type=int, default=5)
     parser.add_argument("--timeout", type=int, default=60)
@@ -58,11 +64,14 @@ def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
 
 def run(args: argparse.Namespace) -> int:
     if not (args.analysis_only or args.offline):
+        if args.episodes_input:
+            raise ValueError("--episodes-input requires --analysis-only or --offline")
         from .repository_workflow import run_repositories
         return run_repositories(args)
     summary = build_analysis(argparse.Namespace(
         input=args.mining_output,
         output=args.output,
+        episodes_input=args.episodes_input,
         config_files=args.config_files,
         source_files=args.source_files,
         token=args.token,

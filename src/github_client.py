@@ -5,6 +5,7 @@ import http.client
 import logging
 import os
 import random
+import threading
 import time
 import urllib.error
 import urllib.parse
@@ -25,6 +26,13 @@ class GitHubClient:
         self.retries = retries
         self.timeout = timeout
         self.base_url = "https://api.github.com"
+        # GitHub recommends serial requests to avoid secondary rate limits.
+        # One client is shared by all enrichment workers, so this lock limits
+        # only network requests while parsing and cache work remain concurrent.
+        self._request_lock = threading.Lock()
+
+    def request_slot(self):
+        return self._request_lock
 
     def _request(self, path: str, accept: str = "application/vnd.github+json", *, authenticate: bool = True) -> tuple[bytes, dict[str, str]]:
         url = path if path.startswith("http") else self.base_url + path
@@ -37,11 +45,15 @@ class GitHubClient:
             headers["Authorization"] = f"Bearer {self.token}"
         for attempt in range(self.retries + 1):
             try:
-                with urllib.request.urlopen(urllib.request.Request(url, headers=headers), timeout=self.timeout) as response:
-                    return response.read(), dict(response.headers.items())
+                with self.request_slot():
+                    with urllib.request.urlopen(urllib.request.Request(url, headers=headers), timeout=self.timeout) as response:
+                        return response.read(), dict(response.headers.items())
             except urllib.error.HTTPError as exc:
                 body = exc.read().decode("utf-8", "replace")
                 remaining = exc.headers.get("X-RateLimit-Remaining")
+                limit = exc.headers.get("X-RateLimit-Limit")
+                used = exc.headers.get("X-RateLimit-Used")
+                resource = exc.headers.get("X-RateLimit-Resource")
                 reset = exc.headers.get("X-RateLimit-Reset")
                 retry_after = exc.headers.get("Retry-After")
                 transient = exc.code in (429, 500, 502, 503, 504) or (exc.code == 403 and remaining == "0")
@@ -53,7 +65,24 @@ class GitHubClient:
                     wait = max(1.0, int(reset) - time.time() + 1)
                 else:
                     wait = min(60.0, 2**attempt + random.random())
-                LOG.warning("GitHub request failed (%s); retrying in %.1fs", exc.code, wait)
+                reset_text = (
+                    time.strftime("%Y-%m-%d %H:%M:%S %z", time.localtime(int(reset)))
+                    if reset and reset.isdigit()
+                    else reset
+                )
+                LOG.warning(
+                    "GitHub request failed (%s); resource=%s remaining=%s/%s used=%s "
+                    "reset=%s retry_after=%s message=%s; retrying in %.1fs",
+                    exc.code,
+                    resource,
+                    remaining,
+                    limit,
+                    used,
+                    reset_text,
+                    retry_after,
+                    " ".join(body.split())[:200],
+                    wait,
+                )
                 time.sleep(wait)
             except (urllib.error.URLError, TimeoutError, http.client.IncompleteRead, ConnectionError) as exc:
                 if attempt == self.retries:
@@ -78,16 +107,24 @@ class GitHubClient:
         body, _ = self._request(url, "text/plain", authenticate=False)
         return body.decode("utf-8", "replace")
 
-    def paginate(self, path: str, item_key: str | None = None) -> Iterator[dict[str, Any]]:
+    def paginate(
+        self,
+        path: str,
+        item_key: str | None = None,
+        *,
+        per_page: int = 100,
+    ) -> Iterator[dict[str, Any]]:
+        if not 1 <= per_page <= 100:
+            raise ValueError("per_page must be between 1 and 100")
         separator = "&" if "?" in path else "?"
         page = 1
         while True:
-            payload = self.get(f"{path}{separator}per_page=100&page={page}")
+            payload = self.get(f"{path}{separator}per_page={per_page}&page={page}")
             items = payload.get(item_key, []) if item_key else payload
             if not isinstance(items, list):
                 raise GitHubError(f"Expected a list while paginating {path}")
             yield from items
-            if len(items) < 100:
+            if len(items) < per_page:
                 break
             page += 1
 

@@ -1,0 +1,27 @@
+reduxjs/redux
+expressjs/express
+parcel-bundler/parcel
+pmndrs/zustand
+preactjs/preact
+vuejs/core
+eslint/eslint
+axios/axios
+jestjs/jest
+mrdoob/three.js
+vitejs/vite
+twbs/bootstrap
+prettier/prettier
+facebook/react
+# Counts unavailable due to GitHub secondary rate limit; provisional order.
+sveltejs/svelte
+remix-run/react-router
+rollup/rollup
+withastro/astro
+nuxt/nuxt
+denoland/deno
+# Verified high-volume repositories; Next.js remains last for later resume.
+webpack/webpack
+storybookjs/storybook
+nodejs/node
+vercel/next.js
+oven-sh/bun

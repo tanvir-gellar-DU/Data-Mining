@@ -14,8 +14,6 @@ from src.build_analysis_dataset import (
     _duration,
     _read_csv,
     extract_diff_paths,
-    is_config_path,
-    is_source_path,
     matches_config_path,
     matches_source_path,
     _load_inputs,
@@ -25,6 +23,17 @@ from src.storage import write_jsonl
 
 class AnalysisDatasetTests(unittest.TestCase):
     def test_config_matcher_accepts_only_requested_patterns(self):
+        patterns = (
+            ".github/workflows/*.yml",
+            ".github/workflows/*.yaml",
+            "requirements*.txt",
+            "constraints*.txt",
+            "pyproject.toml",
+            "setup.py",
+            ".pre-commit-config.yaml",
+            "Dockerfile.*",
+            "docker-compose.yml",
+        )
         accepted = [
             ".github/workflows/ci.yml",
             ".github/workflows/test.yaml",
@@ -45,14 +54,15 @@ class AnalysisDatasetTests(unittest.TestCase):
             "Dockerfilefoo",
             "package.json",
         ]
-        self.assertTrue(all(is_config_path(path) for path in accepted))
-        self.assertFalse(any(is_config_path(path) for path in rejected))
+        self.assertTrue(all(matches_config_path(path, patterns) for path in accepted))
+        self.assertFalse(any(matches_config_path(path, patterns) for path in rejected))
 
     def test_source_matcher(self):
-        self.assertTrue(is_source_path("src/main.py"))
-        self.assertTrue(is_source_path("types/api.pyi"))
-        self.assertFalse(is_source_path("README.md"))
-        self.assertFalse(is_source_path("script.pyx"))
+        patterns = ("*.py", "*.pyi")
+        self.assertTrue(matches_source_path("src/main.py", patterns))
+        self.assertTrue(matches_source_path("types/api.pyi", patterns))
+        self.assertFalse(matches_source_path("README.md", patterns))
+        self.assertFalse(matches_source_path("script.pyx", patterns))
 
     def test_custom_config_matcher(self):
         patterns = ("Cargo.toml", ".github/workflows/*.yaml", "config/*.json")

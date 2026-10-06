@@ -237,7 +237,7 @@ def run(args: argparse.Namespace) -> dict[str, Any]:
     episodes = existing
     ids = [episode["episode_id"] for episode in episodes]
     if len(ids) != len(set(ids)):
-        raise ValueError("Duplicate episode IDs in six-month mining input")
+        raise ValueError("Duplicate episode IDs in mining input")
     client = GitHubClient(retries=args.retries, timeout=args.timeout) if args.online else None
     grouped: dict[str, list[dict[str, Any]]] = defaultdict(list)
     for episode in episodes:
@@ -281,7 +281,7 @@ def run(args: argparse.Namespace) -> dict[str, Any]:
         repository_counts = by_repository.setdefault(row["repository"],
                                                      {"included": 0, "excluded": 0, "unresolved": 0})
         repository_counts[row["status"]] += 1
-    summary = {"six_month_episodes": len(existing), "episodes_screened": len(episodes), "included": counts["included"],
+    summary = {"episodes": len(existing), "episodes_screened": len(episodes), "included": counts["included"],
                "excluded": counts["excluded"], "unresolved": counts["unresolved"],
                "selected_failed_attempts": sum(len(e["failures"]) for e in selected),
                "config_patterns": list(patterns), "since": args.since, "until": args.until,
@@ -297,11 +297,11 @@ def run(args: argparse.Namespace) -> dict[str, Any]:
 
 def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
     parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument("--mining", type=Path, default=Path("java/six_month/data/mining"))
-    parser.add_argument("--config-files", type=Path, default=Path("java/six_month/config_files.txt"))
-    parser.add_argument("--output", type=Path, default=Path("java/six_month/data/config_filter"))
-    parser.add_argument("--since", default="2026-03-15T13:49:24Z")
-    parser.add_argument("--until", default="2026-09-15T13:49:24Z")
+    parser.add_argument("--mining", type=Path, required=True)
+    parser.add_argument("--config-files", type=Path, required=True)
+    parser.add_argument("--output", type=Path, required=True)
+    parser.add_argument("--since", required=True, help="Expected inclusive UTC collection start")
+    parser.add_argument("--until", required=True, help="Expected inclusive UTC collection cutoff")
     parser.add_argument("--online", action="store_true", help="Fetch uncached commit filenames from GitHub")
     parser.add_argument("--workers", type=int, default=4, help="Concurrent repositories to screen")
     parser.add_argument("--retries", type=int, default=5)

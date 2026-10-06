@@ -13,9 +13,16 @@ from src.build_analysis_dataset import build as real_build
 class RepositoryWorkflowTests(unittest.TestCase):
     def setup_args(self, root):
         repos = root / "repos.txt"
+        config_files = root / "config_files.txt"
+        source_files = root / "source_files.txt"
         repos.write_text("owner/one\nowner/two\n")
+        config_files.write_text("config.yml\n")
+        source_files.write_text("*.example\n")
         return parse_args(["--repos", str(repos), "--mining-output", str(root / "mining"),
-                           "--output", str(root / "final"), "--skip-actions-enrichment"])
+                           "--output", str(root / "final"),
+                           "--config-files", str(config_files),
+                           "--source-files", str(source_files),
+                           "--skip-actions-enrichment"])
 
     def collector(self, events):
         def collect(client, repo, output, *args):

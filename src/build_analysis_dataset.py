@@ -73,37 +73,6 @@ FAILURE_LIKE_JOB_CONCLUSIONS = {"failure", "timed_out", "startup_failure", "acti
 ANSI_ESCAPE = re.compile(r"\x1b(?:[@-Z\\-_]|\[[0-?]*[ -/]*[@-~])")
 LOG_TIMESTAMP = re.compile(r"^\d{4}-\d\d-\d\dT\d\d:\d\d:\d\d(?:\.\d+)?Z\s+")
 
-DEFAULT_CONFIG_PATTERNS = (
-    ".github/workflows/*.yml",
-    ".github/workflows/*.yaml",
-    "requirements*.txt",
-    "constraints*.txt",
-    "pyproject.toml",
-    "poetry.lock",
-    "Pipfile",
-    "Pipfile.lock",
-    "setup.py",
-    "setup.cfg",
-    "MANIFEST.in",
-    "pytest.ini",
-    "tox.ini",
-    "mypy.ini",
-    ".flake8",
-    ".pylintrc",
-    "ruff.toml",
-    ".ruff.toml",
-    ".coveragerc",
-    ".pre-commit-config.yaml",
-    ".pre-commit-config.yml",
-    "Dockerfile",
-    "Dockerfile.*",
-    "docker-compose.yml",
-    "docker-compose.yaml",
-    ".dockerignore",
-)
-DEFAULT_SOURCE_PATTERNS = ("*.py", "*.pyi")
-
-
 def _parse_time(value: str) -> datetime:
     return datetime.fromisoformat(value.replace("Z", "+00:00"))
 
@@ -136,14 +105,10 @@ def matches_source_path(path: str, patterns: Iterable[str]) -> bool:
     return matches_config_path(path, patterns)
 
 
-def is_source_path(path: str) -> bool:
-    return matches_source_path(path, DEFAULT_SOURCE_PATTERNS)
-
-
 def load_config_patterns(path: Path | None) -> tuple[str, ...]:
     """Load repository-relative config globs, ignoring blank lines/comments."""
     if path is None:
-        return DEFAULT_CONFIG_PATTERNS
+        raise ValueError("A config-pattern file is required")
     patterns = tuple(
         value
         for raw in path.read_text(encoding="utf-8").splitlines()
@@ -156,7 +121,7 @@ def load_config_patterns(path: Path | None) -> tuple[str, ...]:
 
 def load_source_patterns(path: Path | None) -> tuple[str, ...]:
     if path is None:
-        return DEFAULT_SOURCE_PATTERNS
+        raise ValueError("A source-pattern file is required")
     patterns = tuple(
         value
         for raw in path.read_text(encoding="utf-8").splitlines()
@@ -182,11 +147,6 @@ def matches_config_path(path: str, patterns: Iterable[str]) -> bool:
         elif fnmatch.fnmatchcase(PurePosixPath(value).name, pattern):
             return True
     return False
-
-
-def is_config_path(path: str) -> bool:
-    """Backward-compatible matcher using the default Python config definition."""
-    return matches_config_path(path, DEFAULT_CONFIG_PATTERNS)
 
 
 def _decode_git_path(token: str) -> str:
@@ -1357,14 +1317,14 @@ def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
     parser.add_argument(
         "--config-files",
         type=Path,
-        default=None,
-        help="Text file containing one repository-relative config glob per line; defaults to the built-in Python list",
+        required=True,
+        help="Text file containing one repository-relative config glob per line",
     )
     parser.add_argument(
         "--source-files",
         type=Path,
-        default=None,
-        help="Text file containing one repository-relative source glob per line; defaults to *.py and *.pyi",
+        required=True,
+        help="Text file containing one repository-relative source glob per line",
     )
     parser.add_argument("--token", default=None, help="GitHub token; defaults to GITHUB_TOKEN/GH_TOKEN")
     parser.add_argument("--retries", type=int, default=5)

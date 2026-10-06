@@ -211,7 +211,13 @@ Run an offline pass to use only local diffs, commit records, and cached API
 responses:
 
 ```bash
-python -m src.filter_config_episodes --log-level INFO
+python -m src.filter_config_episodes \
+  --mining java/six_month/data/mining \
+  --config-files java/six_month/config_files.txt \
+  --output java/six_month/data/config_filter \
+  --since 2026-03-15T13:49:24Z \
+  --until 2026-09-15T13:49:24Z \
+  --log-level INFO
 ```
 
 This is useful for validating paths and recovering decisions from copied
@@ -230,6 +236,11 @@ Paste the token when `read` waits and press Enter. Then run:
 
 ```bash
 python -m src.filter_config_episodes \
+  --mining java/six_month/data/mining \
+  --config-files java/six_month/config_files.txt \
+  --output java/six_month/data/config_filter \
+  --since 2026-03-15T13:49:24Z \
+  --until 2026-09-15T13:49:24Z \
   --online \
   --workers 4 \
   --retries 5 \

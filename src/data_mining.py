@@ -22,13 +22,13 @@ def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
     parser.add_argument(
         "--config-files",
         type=Path,
-        default=None,
-        help="Text file with one repository-relative config glob per line; defaults to the built-in Python list",
+        required=True,
+        help="Text file with one repository-relative config glob per line",
     )
     parser.add_argument(
         "--source-files",
         type=Path,
-        default=None,
+        required=True,
         help="Text file with one repository-relative source glob per line",
     )
     parser.add_argument("--mining-output", type=Path, default=Path("data/mining"))
